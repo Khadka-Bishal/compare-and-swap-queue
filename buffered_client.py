@@ -82,6 +82,20 @@ class FailIntent(Intent):
                 break
         return False
 
+class HeartbeatIntent(Intent):
+    def __init__(self, job_id: str, worker_id: str):
+        self.job_id = job_id
+        self.worker_id = worker_id
+        
+    def apply(self, data: dict):
+        for job in data.get("jobs", []):
+            if job["id"] == self.job_id:
+                if job["state"] == "in_progress" and job["claimed_by"] == self.worker_id:
+                    job["heartbeat_ts"] = time.time()
+                    return True
+                break
+        return False
+
 
 # --- BUFFER MAPPER ---
 class BufferedQueueClient:
@@ -141,6 +155,9 @@ class BufferedQueueClient:
     def fail(self, job_id: str, worker_id: str):
         return self._submit(FailIntent(job_id, worker_id))
 
+    def heartbeat(self, job_id: str, worker_id: str):
+        return self._submit(HeartbeatIntent(job_id, worker_id))
+
     def _flush_loop(self):
         """Background thread that continuously flushes buffered intents."""
         while not self._stop_event.is_set():
@@ -159,6 +176,7 @@ class BufferedQueueClient:
 
     def _process_batch(self, batch: List[Dict]):
         """Runs the CAS loop to apply the whole batch of intents at once."""
+        start_t = time.perf_counter()
         self.metrics["total_flushes"] += 1
         self.metrics["total_intents"] += len(batch)
         
@@ -178,6 +196,7 @@ class BufferedQueueClient:
                 item["result"]["value"] = item["result"].get("temp_value")
                 
         except ConflictError as e:
+            self.metrics["total_conflicts"] += 1
             # If it totally fails after 10-20 retries, bubble error to threads
             for item in batch:
                 item["result"]["error"] = e
@@ -185,6 +204,14 @@ class BufferedQueueClient:
             for item in batch:
                 item["result"]["error"] = e
         finally:
+            elapsed_ms = (time.perf_counter() - start_t) * 1000
+            import json
+            logger.info(json.dumps({
+                "event": "flush_batch", 
+                "batch_size": len(batch), 
+                "duration_ms": round(elapsed_ms, 2)
+            }))
+            
             # Wake up all waiting callers
             for item in batch:
                 item["event"].set()
