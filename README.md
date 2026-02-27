@@ -1,5 +1,3 @@
-# JSON Object Storage Queue
-
 A lightweight, highly-available, distributed job queue built entirely on top of a single local JSON file using atomic Compare-And-Swap (CAS) operations. 
 
 This project is a functional, local implementation of the architecture described in [Turbopuffer's "How to build a distributed queue in a single JSON file on object storage"](https://turbopuffer.com/blog/object-storage-queue).
