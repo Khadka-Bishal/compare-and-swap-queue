@@ -9,11 +9,17 @@ class QueueClient:
         def init_queue(data):
             if "jobs" not in data:
                 data["jobs"] = []
+            if "broker" not in data:
+                data["broker"] = None
+            if "recently_done" not in data:
+                data["recently_done"] = {}
             return data
         self.cas.update_with_retry(init_queue)
 
-    def push(self, payload):
-        """Adds a new job to the queue."""
+    def push(self, payload, idempotency_key=None):
+        """Adds a new job to the queue, returning the job ID."""
+        # Note: In Phase 2/3 this is bypassed anyway by BufferedQueueClient's Intents,
+        # but we update the native wrapper for completion.
         job_id = str(uuid.uuid4())
         new_job = {
             "id": job_id,
@@ -22,11 +28,14 @@ class QueueClient:
             "claimed_by": None,
             "heartbeat_ts": None,
             "created_ts": time.time(),
-            "attempt": 0
+            "attempt": 0,
+            "idempotency_key": idempotency_key
         }
 
         def _push(data):
-            # We append to the list of jobs
+            if idempotency_key and idempotency_key in data.get("recently_done", {}):
+                return data
+
             data["jobs"].append(new_job)
             return data
             
