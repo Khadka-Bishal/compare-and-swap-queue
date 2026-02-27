@@ -1,0 +1,4 @@
+__pycache__
+queue.json
+queue.lock
+queue.meta
