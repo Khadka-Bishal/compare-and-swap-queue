@@ -6,45 +6,22 @@ When building multi-agent AI systems or high-throughput async processing pipelin
 
 This project proves you can achieve **robust distributed coordination** using nothing more than a dumb storage system (like AWS S3, Google Cloud Storage, or in this case, a local OS file) as long as it supports atomic CAS (Compare-And-Swap). 
 
-- **Idempotent Pushes:** If an agent gets disconnected and pushes the same "Generate Image" job twice, the queue guarantees it only processes once.
-- **Failover / High Availability:** If the active Broker process crashes mid-generation, a Smart Client will instantly detect the failure, spawn a brand new Broker, elect it via the JSON file, and seamlessly retry.
-- **Lease Timeout:** If a worker node (or AI agent) crashes while holding a job, the lease expires and another worker automatically reclaims it.
-- **Batched Throughput:** Instead of bottlenecking on disk I/O, the broker groups thousands of concurrent agent requests into a single atomic JSON write.
+- **Idempotent Pushes:** Reconnected agents safely re-queue without duplicating work.
+- **Failover / HA:** If the Broker crashes, the Smart Client instantly detects it, spawns a new Broker, and seamlessly retries.
+- **Lease Timeouts:** If a worker crashes mid-job, the lease expires and another worker claims it.
+- **Batched Throughput:** The broker groups thousands of concurrent requests into a single atomic JSON write.
 
-## How It Works
+## The Life of a Job
 
-The system operates in 4 conceptual layers:
+When you call `client.push({"task": "send_email"})`, here is how it actually travels through the codebase:
 
-1. **Storage Layer (`src/queue/storage.py`)**: Uses temporary files and `os.rename` to provide atomic Compare-And-Swap over a single `queue.json` file.
-2. **Buffer Layer (`src/queue/service.py`)**: Groups incoming requests (Push, Claim, Ack, Heartbeat) into "Intents" and flushes them to disk as a single transaction every 50ms.
-3. **Broker API (`src/queue/router.py`)**: A structured FastAPI server that exposes HTTP endpoints to workers.
-4. **Smart Client (`src/client/smart_client.py`)**: A self-healing HTTP client. It reads the raw `queue.json` to find the active broker's URL. If the URL is dead, it spawns a new broker automatically.
+1. **The Entrypoint:** Your script asks `SmartQueueClient` to push. Without opening any files, the client sends an HTTP `POST` to the FastAPI Broker.
+2. **The Waiting Room (`service.py`):** The Broker catches the HTTP request, turns the job into an `Intent`, and throws it into a temporary in-memory `List` (the Buffer). The HTTP endpoint *pauses* right here and waits.
+3. **The Garbage Truck:** Every 50 milliseconds, a background background thread grabs the entire contents of the Buffer (your job + hundreds of other jobs from other scripts sent simultaneously) and forms one massive "Batch".
+4. **The Atomic Save (`storage.py`):** The storage layer opens `queue.json`, validates that no one else is currently editing it, applies the entire Batch of jobs to the JSON dictionary in Python's memory, and atomically renames the temporary JSON map over the old file. 
+5. **The Reply:** Once the massive batch save succeeds, the Garbage Truck wakes up your paused HTTP endpoint, which returns `{"status": "ok"}` to your script!
 
-## How to Play with It
-
-First, install the necessary dependencies:
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install fastapi httpx uvicorn pydantic pydantic-settings
-```
-
-### The pure CAS Benchmark
-Watch 20 independent Python threads try to hammer the JSON file directly. You'll see thousands of conflicts as they fight for the single CAS lock.
-```bash
-PYTHONPATH=. python3 tests/test_benchmark.py
-# (Wait for Phase 1 to finish, then watch Phase 4 seamlessly batch them)
-```
-
-### The Chaos / Fault Tolerance Simulation
-Watch the queue recover from catastrophes in real-time.
-```bash
-PYTHONPATH=. python3 tests/test_faults.py
-```
-This script will:
-1. Hard-crash a worker to prove lease timeouts work and jobs are reclaimed.
-2. Hard-terminate the active FastAPI broker while it's processing data.
-3. Prove that the SmartClient automatically detects the downtime, elects a new port, boots a new FastAPI instance, and successfully finishes the pending request *without* any data loss.
+By forcing massive traffic jams to wait in the Buffer and grouping them into a single massive write, we achieve incredible multi-process throughput on a single dumb JSON file.
 
 ## Architecture
 
@@ -85,3 +62,28 @@ graph TD
     CAS -->|2. Validates lock| JSON
     CAS -->|3. Overwrites atomic| JSON
 ```
+
+## Run
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install fastapi httpx uvicorn pydantic pydantic-settings
+```
+
+### The pure CAS Benchmark
+Watch 20 independent Python threads try to hammer the JSON file directly. You'll see thousands of conflicts as they fight for the single CAS lock.
+```bash
+PYTHONPATH=. python3 tests/test_benchmark.py
+# (Wait for Phase 1 to finish, then watch Phase 4 seamlessly batch them)
+```
+
+### The Chaos / Fault Tolerance Simulation
+Watch the queue recover from catastrophes in real-time.
+```bash
+PYTHONPATH=. python3 tests/test_faults.py
+```
+This script will:
+1. Hard-crash a worker to prove lease timeouts work and jobs are reclaimed.
+2. Hard-terminate the active FastAPI broker while it's processing data.
+3. Prove that the SmartClient automatically detects the downtime, elects a new port, boots a new FastAPI instance, and successfully finishes the pending request *without* any data loss.
