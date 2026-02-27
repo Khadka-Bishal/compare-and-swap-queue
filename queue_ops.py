@@ -107,22 +107,34 @@ class QueueClient:
         self.cas.update_with_retry(_fail)
         return success
 
-    def compact(self):
-        """Removes all 'done' and 'dead' jobs to shrink the JSON file."""
-        num_removed = 0
+    def compact(self, archive_file="archive.jsonl"):
+        """Removes all 'done' and 'dead' jobs and appends them to an archive file."""
+        archived_jobs = []
         
         def _compact(data):
-            nonlocal num_removed
-            original_len = len(data.get("jobs", []))
+            nonlocal archived_jobs
             
-            # Keep only jobs that are NOT done and NOT dead
+            # Identify jobs to remove
+            archived_jobs = [
+                j for j in data.get("jobs", []) 
+                if j["state"] in ("done", "dead")
+            ]
+            
+            # Keep only active jobs
             data["jobs"] = [
                 j for j in data.get("jobs", []) 
                 if j["state"] not in ("done", "dead")
             ]
             
-            num_removed = original_len - len(data["jobs"])
             return data
 
         self.cas.update_with_retry(_compact)
-        return num_removed
+        
+        # Append removed jobs to an archive (JSONL format)
+        if archived_jobs:
+            with open(archive_file, "a") as f:
+                import json
+                for job in archived_jobs:
+                    f.write(json.dumps(job) + "\n")
+                    
+        return len(archived_jobs)
