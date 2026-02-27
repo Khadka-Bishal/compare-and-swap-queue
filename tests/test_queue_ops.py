@@ -1,5 +1,5 @@
 import os
-from queue_ops import QueueClient
+from src.queue.service import QueueClient
 
 def main():
     # Clean up old queue files

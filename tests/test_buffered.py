@@ -1,8 +1,8 @@
 import os
 import time
 import threading
-from queue_ops import QueueClient
-from buffered_client import BufferedQueueClient
+from src.queue.service import QueueClient
+from src.queue.service import BufferedQueueClient
 
 def run_worker(client: BufferedQueueClient, worker_id: str, num_jobs: int):
     # Each worker pushes and claims jobs rapidly

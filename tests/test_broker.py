@@ -13,7 +13,7 @@ def main():
 
     print("Starting FastAPI Broker...")
     server = subprocess.Popen(
-        [".venv/bin/uvicorn", "broker:app", "--host", "127.0.0.1", "--port", "8000"],
+        [".venv/bin/uvicorn", "src.main:app", "--host", "127.0.0.1", "--port", "8000"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True

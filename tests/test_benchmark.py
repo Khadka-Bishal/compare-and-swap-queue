@@ -3,8 +3,8 @@ import time
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
-from queue_ops import QueueClient
-from smart_client import SmartQueueClient
+from src.queue.service import QueueClient
+from src.client.smart_client import SmartQueueClient
 
 # ---------------------------------------------
 # Test Config
@@ -50,7 +50,7 @@ def run_buffered_broker():
     
     # Start the broker in the background
     broker_proc = subprocess.Popen(
-        [".venv/bin/uvicorn", "broker:app", "--host", "127.0.0.1", "--port", "8000"],
+        [".venv/bin/uvicorn", "src.main:app", "--host", "127.0.0.1", "--port", "8000"],
         stdout=subprocess.DEVNULL, # keep console clean
         stderr=subprocess.DEVNULL
     )

@@ -2,8 +2,8 @@ import os
 import time
 import multiprocessing
 import httpx
-from smart_client import SmartQueueClient
-from buffered_client import BufferedQueueClient
+from src.client.smart_client import SmartQueueClient
+from src.queue.service import BufferedQueueClient
 
 def simulate_heartbeat_failure():
     print("\n--- TEST: Worker Failure & Reclaim ---")
@@ -56,7 +56,7 @@ def simulate_broker_failure():
     # client a bad URL to force the _make_request retry block to spawn a new one.
     
     # Manually poison the queue.json with a dead URL to force the client to failover
-    from queue_ops import QueueClient
+    from src.queue.service import QueueClient
     raw_qs = QueueClient()
     def _poison(data):
         data["broker"] = "http://127.0.0.1:9999" # Dead port

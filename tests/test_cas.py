@@ -4,7 +4,7 @@ import sys
 
 # Import our class from storage.py
 try:
-    from storage import LocalCASObject
+    from src.queue.storage import LocalCASObject
 except ImportError:
     print("Could not import LocalCASObject. Make sure storage.py is in the same directory.")
     sys.exit(1)

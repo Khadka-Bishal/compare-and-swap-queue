@@ -3,7 +3,7 @@ import httpx
 import logging
 import subprocess
 import socket
-from queue_ops import QueueClient
+from src.queue.service import QueueClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class SmartQueueClient:
         
         # We spawn the broker in the background
         subprocess.Popen(
-            [".venv/bin/uvicorn", "broker:app", "--host", "127.0.0.1", "--port", str(port)],
+            [".venv/bin/uvicorn", "src.main:app", "--host", "127.0.0.1", "--port", str(port)],
             stdout=subprocess.DEVNULL, # Keep terminal clean in this demo
             stderr=subprocess.DEVNULL
         )
@@ -65,7 +65,7 @@ class SmartQueueClient:
             if retry_count < 2:
                 logger.warning(f"Broker at {url} seems dead. Initiating failover...")
                 self._spawn_new_broker()
-                return self._make_request(endpoint, json_data, retry_count + 1)
+                return self._make_request(method, endpoint, json_data, retry_count + 1)
             else:
                 raise Exception(f"Failed to communicate with broker after 3 retries: {e}")
 
