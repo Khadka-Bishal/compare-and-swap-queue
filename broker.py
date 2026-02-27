@@ -34,6 +34,7 @@ async def broker_suicide_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global buffered_client
+    
     base_client = QueueClient("queue")
     
     buffered_client = BufferedQueueClient(

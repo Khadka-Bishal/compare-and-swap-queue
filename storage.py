@@ -91,7 +91,6 @@ class LocalCASObject:
                 if current_version != expected_version:
                     return False, current_version
 
-                # It's a match, we can write!
                 new_version = current_version + 1
                 
                 # Write data atomically

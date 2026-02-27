@@ -48,15 +48,17 @@ class SmartQueueClient:
                 
         raise Exception("Failed to boot new broker.")
 
-    def _make_request(self, endpoint: str, json_data: dict, retry_count: int = 0):
+    def _make_request(self, method: str, endpoint: str, json_data: dict = None, retry_count: int = 0):
         url = self._get_active_broker_url()
         
-        # If there's no broker registered at all, we must spawn one
         if not url:
             url = self._spawn_new_broker()
 
         try:
-            resp = self.http_client.post(f"{url}{endpoint}", json=json_data)
+            if method.upper() == "GET":
+                resp = self.http_client.get(f"{url}{endpoint}")
+            else:
+                resp = self.http_client.post(f"{url}{endpoint}", json=json_data)
             resp.raise_for_status()
             return resp.json()
         except (httpx.ConnectError, httpx.RequestError) as e:
@@ -69,14 +71,14 @@ class SmartQueueClient:
 
     # --- Queue API ---
     def push(self, payload: dict, idempotency_key: str = None):
-        return self._make_request("/push", {"payload": payload, "idempotency_key": idempotency_key})
+        return self._make_request("POST", "/push", {"payload": payload, "idempotency_key": idempotency_key})
 
     def claim(self, worker_id: str, lease_timeout_sec: float = 60.0):
-        resp = self._make_request("/claim", {"worker_id": worker_id, "lease_timeout_sec": lease_timeout_sec})
+        resp = self._make_request("POST", "/claim", {"worker_id": worker_id, "lease_timeout_sec": lease_timeout_sec})
         return resp.get("job")
 
     def ack(self, job_id: str, worker_id: str):
-        return self._make_request("/ack", {"job_id": job_id, "worker_id": worker_id})
+        return self._make_request("POST", "/ack", {"job_id": job_id, "worker_id": worker_id})
 
     def heartbeat(self, job_id: str, worker_id: str):
-        return self._make_request("/heartbeat", {"job_id": job_id, "worker_id": worker_id})
+        return self._make_request("POST", "/heartbeat", {"job_id": job_id, "worker_id": worker_id})
